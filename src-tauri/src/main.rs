@@ -44,6 +44,7 @@ const EXTERNAL_LINKS_SCRIPT: &str = r#"
 struct AppState {
     data_dir: std::path::PathBuf,
     backend: Mutex<Option<BackendHandle>>,
+    splash_url: Mutex<String>,
 }
 
 fn main() {
@@ -58,12 +59,12 @@ fn main() {
         .manage({
             let data_dir = paths::data_dir();
             fs::create_dir_all(&data_dir).expect("无法创建数据目录");
-            AppState { data_dir, backend: Mutex::new(None) }
+            AppState { data_dir, backend: Mutex::new(None), splash_url: Mutex::new(String::new()) }
         })
         .invoke_handler(tauri::generate_handler![first_run_state, start_backend, backend_log])
         .setup(|app| {
             // 主窗口运行时创建:需要挂 initialization_script(外链接管)
-            tauri::WebviewWindowBuilder::new(
+            let w = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -73,6 +74,9 @@ fn main() {
             .min_inner_size(1024.0, 700.0)
             .initialization_script(EXTERNAL_LINKS_SCRIPT)
             .build()?;
+            // 捕获 splash 绝对地址:成功切到后端页后,崩溃守护需要用绝对地址导航回 splash(#crash)
+            *app.state::<AppState>().splash_url.lock().unwrap() =
+                w.url().map(|u| u.to_string()).unwrap_or_default();
             // 非首启:后台线程直接启动(splash 显示 loading 态)
             let handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -169,8 +173,9 @@ fn run_startup_sequence(app: &AppHandle) -> Result<(), String> {
                     drop(guard);
                     let data_dir = watch.state::<AppState>().data_dir.clone();
                     let _ = fs::remove_file(paths::pid_file(&data_dir));
+                    let splash_url = watch.state::<AppState>().splash_url.lock().unwrap().clone();
                     if let Some(w) = watch.get_webview_window("main") {
-                        let _ = w.eval("location.replace('index.html#crash')");
+                        let _ = w.eval(&format!("location.replace('{splash_url}#crash')"));
                     }
                     return;
                 }
