@@ -1,0 +1,24 @@
+[package]
+name = "geek-waves-desktop"
+version = "0.1.0"
+description = "GeekWaves 桌面壳(Tauri)"
+edition = "2024"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+rand = "0.8"
+base64 = "0.22"
+sysinfo = "0.31"
+
+[profile.release]
+strip = true
+lto = true

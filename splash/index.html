@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeekWaves</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: grid; place-items: center;
+         background: #0f172a; color: #e2e8f0;
+         font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .card { width: min(560px, 90vw); padding: 40px; border-radius: 16px;
+          background: #1e293b; box-shadow: 0 8px 40px rgba(0,0,0,.4); text-align: center; }
+  h1 { font-size: 28px; margin: 0 0 8px; color: #22d3ee; }
+  h2 { font-size: 20px; margin: 0 0 12px; }
+  p { color: #94a3b8; line-height: 1.6; margin: 8px 0; }
+  button { appearance: none; border: 0; border-radius: 10px; padding: 12px 22px; margin: 8px 6px;
+           font-size: 15px; cursor: pointer; background: #0891b2; color: #fff; }
+  button:hover { background: #06b6d4; }
+  button.ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  pre { text-align: left; max-height: 40vh; overflow: auto; background: #0f172a;
+        border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 12px;
+        color: #f87171; white-space: pre-wrap; margin: 12px 0; }
+  .spinner { width: 36px; height: 36px; margin: 16px auto; border-radius: 50%;
+             border: 3px solid #334155; border-top-color: #22d3ee; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="card" id="screen-first" hidden>
+  <h1>GeekWaves</h1>
+  <p>欢迎使用 GeekWaves 桌面版</p>
+  <p>检测到这是首次启动:可以全新开始,或导入现有 GeekWaves 数据(资讯源、AI 配置等)。</p>
+  <button id="btn-import" hidden>导入现有数据</button>
+  <button id="btn-fresh">全新开始</button>
+</div>
+
+<div class="card" id="screen-loading" hidden>
+  <h1>GeekWaves</h1>
+  <div class="spinner"></div>
+  <p>正在启动 GeekWaves,首次建库可能需要十几秒…</p>
+</div>
+
+<div class="card" id="screen-error" hidden>
+  <h2>后端启动失败</h2>
+  <p id="err-message"></p>
+  <pre id="err-log"></pre>
+  <button id="btn-retry">重试</button>
+  <button id="btn-exit" class="ghost">退出</button>
+</div>
+
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+
+  const screens = ['screen-first', 'screen-loading', 'screen-error'];
+  function show(id) { screens.forEach(s => { document.getElementById(s).hidden = (s !== id); }); }
+
+  function showError(message, log) {
+    document.getElementById('err-message').textContent = message || String(message);
+    document.getElementById('err-log').textContent = log || '(无日志)';
+    show('screen-error');
+  }
+
+  listen('backend-error', ({ payload }) => showError(payload.message, payload.log));
+
+  function start() {
+    show('screen-loading');
+    invoke('start_backend').catch(e => showError(String(e), ''));
+  }
+  document.getElementById('btn-fresh').addEventListener('click', start);
+  document.getElementById('btn-retry').addEventListener('click', start);
+  document.getElementById('btn-exit').addEventListener('click', () => {
+    window.__TAURI__.process.exit(0);
+  });
+
+  (async function init() {
+    if (location.hash === '#crash') {
+      // 运行中后端意外退出,守护线程导航至此
+      let log = '';
+      try { log = await invoke('backend_log'); } catch (e) {}
+      showError('后端进程意外退出,已停止。可点击重试重新启动。', log);
+      return;
+    }
+    const first = await invoke('first_run_state');
+    show(first ? 'screen-first' : 'screen-loading');
+  })();
+</script>
+</body>
+</html>
