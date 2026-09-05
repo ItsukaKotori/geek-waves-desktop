@@ -81,7 +81,11 @@ fn ping_ok(port: u16) -> bool {
     buf.starts_with("HTTP/1.1 200") || buf.starts_with("HTTP/1.0 200")
 }
 
-/// SIGTERM → 5s → SIGKILL,收尸并清 pid 文件
+/// SIGTERM → 5s → SIGKILL,收尸并清 pid 文件。
+/// 死亡检测必须用 `child.try_wait()`:sysinfo 0.31 的 `ProcessesToUpdate::Some` 刷新从不移除
+/// 死亡条目(apple/system.rs remove_processes=false),`sys.process(pid).is_none()` 恒假,
+/// 轮询必空耗满超时,且 deadline 后对可能复用的 pid 盲发 SIGKILL(Task 3 审查实修)。
+/// std `child.kill()` 直发句柄(SIGKILL),无 pid 复用风险。
 pub fn graceful_shutdown(child: &mut Child, pid_path: &Path) {
     let pid = Pid::from_u32(child.id());
     let mut sys = System::new();
@@ -90,14 +94,15 @@ pub fn graceful_shutdown(child: &mut Child, pid_path: &Path) {
         p.kill_with(Signal::Term).unwrap_or_else(|| p.kill());
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            sys.refresh_processes(ProcessesToUpdate::Some(&[pid]));
-            if sys.process(pid).is_none() || Instant::now() > deadline {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                break; // 已 reap,确定死亡,立即退出
+            }
+            if Instant::now() > deadline {
+                let _ = child.kill();
+                let _ = child.wait();
                 break;
             }
             thread::sleep(Duration::from_millis(200));
-        }
-        if let Some(p) = sys.process(pid) {
-            p.kill();
         }
     }
     let _ = child.wait();

@@ -4,7 +4,8 @@
 #   ./scripts/build.sh               # 组装 + 冒烟 + cargo tauri build(出 dmg)
 #   ./scripts/build.sh --bundle-only # 仅组装(供 CI 或 cargo tauri dev 前置)
 # 环境变量:FRONTEND_DIR / BACKEND_DIR 覆盖兄弟仓库路径;JAVA_HOME 覆盖 jlink 用 JDK(须 21);
-#           GRADLE_OFFLINE=1(默认)离线构建后端;GRADLE_EXTRA 追加 gradlew 参数(预留给 CI 传 init 脚本)
+#           GRADLE_OFFLINE=1(默认)离线构建后端;GRADLE_EXTRA 追加 gradlew 参数(预留给 CI 传 init 脚本;
+#           仅限空格分隔的 flag 类参数,经词分割展开,含空格的路径会碎)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,8 +35,10 @@ cp -R "$FRONTEND_DIR/dist" "$RESOURCES/webapp"
 
 # --- 2. 后端 ---
 log "构建后端($BACKEND_DIR)"
-if [[ "$GRADLE_OFFLINE" == "1" ]]; then GRADLE_FLAGS=(--offline); else GRADLE_FLAGS=(); fi
-( cd "$BACKEND_DIR" && ./gradlew --quiet "${GRADLE_FLAGS[@]}" ${GRADLE_EXTRA:-} bootJar )
+# GRADLE_FLAGS 用字符串而非数组:macOS 自带 /bin/bash 3.2 下 set -u + 空数组展开
+# "${ARR[@]}" 会报 unbound variable(4.4 才修复),字符串 + 词分割两端兼容。
+if [[ "$GRADLE_OFFLINE" == "1" ]]; then GRADLE_FLAGS="--offline"; else GRADLE_FLAGS=""; fi
+( cd "$BACKEND_DIR" && ./gradlew --quiet $GRADLE_FLAGS ${GRADLE_EXTRA:-} bootJar )
 JAR="$(ls "$BACKEND_DIR"/build/libs/geekwaves-server-*.jar | grep -v '\.original$' | head -1)"
 cp "$JAR" "$RESOURCES/app.jar"
 

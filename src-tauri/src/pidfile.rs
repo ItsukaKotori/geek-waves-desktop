@@ -35,15 +35,33 @@ pub fn cleanup_orphan(pid_path: &Path, marker: &str) {
         return;
     }
     proc.kill_with(Signal::Term).unwrap_or_else(|| proc.kill());
+    // 等待循环必须用 All 模式刷新:sysinfo 0.31 的 Some(&[pid]) 刷新从不移除死亡条目
+    // (apple/system.rs remove_processes=false),`process(pid).is_none()` 恒假 → 必空耗满
+    // 超时(Task 3 审查实修);All 模式会移除死亡条目,死亡检测才有效。
+    let cmdline_matches = |sys: &System| {
+        sys.process(pid)
+            .map(|p| {
+                let cmdline = p.cmd().iter().map(|s| s.to_string_lossy()).collect::<String>();
+                cmdline.contains(marker) && cmdline.contains("app.jar")
+            })
+            .unwrap_or(false)
+    };
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        sys.refresh_processes(ProcessesToUpdate::Some(&[pid]));
+        sys.refresh_processes(ProcessesToUpdate::All);
         if sys.process(pid).is_none() {
             break;
         }
         if Instant::now() > deadline {
-            if let Some(p) = sys.process(pid) {
-                p.kill();
+            // deadline 后不能盲杀:pid 可能已被复用,先重取 cmd 复验特征再 SIGKILL
+            sys.refresh_processes_specifics(
+                ProcessesToUpdate::Some(&[pid]),
+                ProcessRefreshKind::new().with_cmd(UpdateKind::Always),
+            );
+            if cmdline_matches(&sys) {
+                if let Some(p) = sys.process(pid) {
+                    p.kill();
+                }
             }
             break;
         }
