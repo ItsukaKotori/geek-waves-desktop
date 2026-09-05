@@ -101,8 +101,19 @@ fn main() {
                 app.exit(0);
             }
         })
-        .run(tauri::generate_context!())
-        .expect("GeekWaves 桌面壳启动失败");
+        .build(tauri::generate_context!())
+        .expect("GeekWaves 桌面壳启动失败")
+        .run(|app, event| {
+            // 兜底清理:macOS Cmd+Q/App quits 走 NSApplication terminate,不触发窗口 Destroyed
+            // (Task 3 本机端到端实修:osascript quit 后 java 孤儿残留)。Exit 事件收尾,
+            // 正常关窗路径已先取走句柄,此处为 None 直接跳过。
+            if matches!(event, tauri::RunEvent::Exit) {
+                let state: tauri::State<AppState> = app.state();
+                if let Some(mut b) = state.backend.lock().unwrap().take() {
+                    backend::graceful_shutdown(&mut b.child, &paths::pid_file(&state.data_dir));
+                }
+            }
+        });
 }
 
 /// 首启判定:数据目录无 *.mv.db 且无 imported 标记
