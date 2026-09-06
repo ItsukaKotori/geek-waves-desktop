@@ -33,7 +33,9 @@ pub fn spawn_backend(
         }
     }
     let log = OpenOptions::new().create(true).append(true).open(log_path)?;
-    let datasource = format!("jdbc:h2:file:{}{}", data_dir.join("geekwaves").display(), H2_PARAMS);
+    // file:/jdbc: URL 需正斜杠:Windows PathBuf display 会出反斜杠,统一归一(冒烟同款实修)
+    let to_url_path = |p: &Path| p.display().to_string().replace('\\', "/");
+    let datasource = format!("jdbc:h2:file:{}{}", to_url_path(&data_dir.join("geekwaves")), H2_PARAMS);
     Command::new(java_bin)
         .arg("-jar")
         .arg(jar)
@@ -42,7 +44,7 @@ pub fn spawn_backend(
         .arg(format!("--spring.datasource.url={datasource}"))
         .arg(format!(
             "--spring.web.resources.static-locations=file:{}/",
-            webapp_dir.display()
+            to_url_path(webapp_dir)
         ))
         .arg("--geekwaves.web.spa-fallback=true")
         .env("GEEKWAVES_CRYPTO_KEY", key)

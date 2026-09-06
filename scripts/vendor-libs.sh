@@ -13,9 +13,13 @@ for art in $ARTIFACTS; do
   src="$CACHE/$art/$VERSION"
   [ -d "$src" ] || { echo "缓存缺 $art($src)"; exit 1; }
   dst="$OUT/org/itsuka/$art/$VERSION"; mkdir -p "$dst"
-  find "$src" -name "$art-$VERSION.jar" -exec cp {} "$dst/" \;
-  find "$src" -name "$art-$VERSION.pom" -exec cp {} "$dst/" \;
-  [ -f "$dst/$art-$VERSION.jar" ] && [ -f "$dst/$art-$VERSION.pom" ] || { echo "$art 导出不完整"; exit 1; }
+  # SNAPSHOT 缓存可含多个构建(hash 目录),必须取 mtime 最新的——与 Gradle 的解析口径一致;
+  # 曾因 find|cp 覆盖顺序打进旧构建,CI 用旧 jar 在启动期 INSERT 上炸(无请求上下文取登录用户)。
+  newest() { find "$src" -name "$1" -exec stat -f "%m %N" {} + | sort -rn | head -1 | cut -d' ' -f2-; }
+  jar_src="$(newest "$art-$VERSION.jar")"
+  pom_src="$(newest "$art-$VERSION.pom")"
+  [ -n "$jar_src" ] && [ -n "$pom_src" ] || { echo "$art 导出不完整(缺 jar 或 pom)"; exit 1; }
+  cp "$jar_src" "$dst/" && cp "$pom_src" "$dst/"
   cat > "$dst/maven-metadata.xml" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <metadata>
