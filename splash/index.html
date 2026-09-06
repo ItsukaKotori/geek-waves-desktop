@@ -23,6 +23,11 @@
   pre { text-align: left; max-height: 40vh; overflow: auto; background: #0f172a;
         border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 12px;
         color: #f87171; white-space: pre-wrap; margin: 12px 0; }
+  textarea { width: 100%; min-height: 76px; border-radius: 8px; border: 1px solid #334155;
+             background: #0f172a; color: #e2e8f0; padding: 10px; font-size: 13px;
+             font-family: ui-monospace, monospace; resize: vertical; }
+  .dim { color: #64748b; font-size: 13px; }
+  .error { color: #f87171; font-size: 13px; min-height: 18px; }
   .spinner { width: 36px; height: 36px; margin: 16px auto; border-radius: 50%;
              border: 3px solid #334155; border-top-color: #22d3ee; animation: spin .9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -30,11 +35,22 @@
 </head>
 <body>
 
+<div class="card" id="screen-import" hidden>
+  <h2>导入现有数据</h2>
+  <p>请先停止正在运行的原 GeekWaves 后端,再选择其数据文件(否则拷贝可能损坏)。</p>
+  <p><button id="btn-pick">选择 geekwaves.mv.db 文件</button> <span id="db-name" class="dim">未选择</span></p>
+  <p>原 GEEKWAVES_CRYPTO_KEY(与源库配对的 32 字节 base64):</p>
+  <textarea id="key-input" rows="3" placeholder="粘贴密钥…"></textarea>
+  <p id="import-error" class="error"></p>
+  <button id="btn-do-import" disabled>导入并启动</button>
+  <button id="btn-back" class="ghost">返回</button>
+</div>
+
 <div class="card" id="screen-first" hidden>
   <h1>GeekWaves</h1>
   <p>欢迎使用 GeekWaves 桌面版</p>
   <p>检测到这是首次启动:可以全新开始,或导入现有 GeekWaves 数据(资讯源、AI 配置等)。</p>
-  <button id="btn-import" hidden>导入现有数据</button>
+  <button id="btn-import">导入现有数据</button>
   <button id="btn-fresh">全新开始</button>
 </div>
 
@@ -56,7 +72,7 @@
   const { invoke } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;
 
-  const screens = ['screen-first', 'screen-loading', 'screen-error'];
+  const screens = ['screen-first', 'screen-import', 'screen-loading', 'screen-error'];
   function show(id) { screens.forEach(s => { document.getElementById(s).hidden = (s !== id); }); }
 
   function showError(message, log) {
@@ -66,6 +82,29 @@
   }
 
   listen('backend-error', ({ payload }) => showError(payload.message, payload.log));
+
+  const picked = { path: null };
+  document.getElementById('btn-import').addEventListener('click', () => show('screen-import'));
+  document.getElementById('btn-back').addEventListener('click', () => show('screen-first'));
+  document.getElementById('btn-pick').addEventListener('click', async () => {
+    const p = await invoke('pick_db_file');
+    if (p) {
+      picked.path = p;
+      document.getElementById('db-name').textContent = p.split(/[\\/]/).pop();
+      refreshImportState();
+    }
+  });
+  document.getElementById('key-input').addEventListener('input', refreshImportState);
+  function refreshImportState() {
+    const key = document.getElementById('key-input').value.trim();
+    document.getElementById('btn-do-import').disabled = !(picked.path && key);
+  }
+  document.getElementById('btn-do-import').addEventListener('click', () => {
+    document.getElementById('import-error').textContent = '';
+    show('screen-loading');
+    invoke('do_import', { dbPath: picked.path, key: document.getElementById('key-input').value })
+      .catch(e => showError(String(e), ''));
+  });
 
   function start() {
     show('screen-loading');

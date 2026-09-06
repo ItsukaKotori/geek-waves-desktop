@@ -32,6 +32,7 @@
   "permissions": [
     "core:default",
     "process:allow-exit",
-    "opener:default"
+    "opener:default",
+    "dialog:default"
   ]
 }

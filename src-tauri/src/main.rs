@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod backend;
+mod import;
 mod keygen;
 mod paths;
 mod pidfile;
@@ -55,13 +56,20 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .manage({
             let data_dir = paths::data_dir();
             fs::create_dir_all(&data_dir).expect("无法创建数据目录");
             AppState { data_dir, backend: Mutex::new(None), splash_url: Mutex::new(String::new()) }
         })
-        .invoke_handler(tauri::generate_handler![first_run_state, start_backend, backend_log])
+        .invoke_handler(tauri::generate_handler![
+            first_run_state,
+            start_backend,
+            backend_log,
+            pick_db_file,
+            do_import
+        ])
         .setup(|app| {
             // 主窗口运行时创建:需要挂 initialization_script(外链接管)
             let w = tauri::WebviewWindowBuilder::new(
@@ -229,4 +237,31 @@ fn start_backend(app: AppHandle) -> Result<(), String> {
 fn backend_log(app: AppHandle) -> String {
     let state: tauri::State<AppState> = app.state();
     backend::log_tail(&paths::log_file(&state.data_dir), 50)
+}
+
+/// 系统文件选择器挑 .mv.db(阻塞式,命令跑在工作线程不卡 UI)
+#[tauri::command]
+fn pick_db_file(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog()
+        .file()
+        .add_filter("H2 数据库文件", &["mv.db"])
+        .blocking_pick_file()
+        .map(|p| p.to_string())
+}
+
+/// 导入:校验 key 与源文件 → 拷库 → 落 key(0600)→ 走启动序列
+#[tauri::command]
+fn do_import(app: AppHandle, db_path: String, key: String) -> Result<(), String> {
+    let state: tauri::State<AppState> = app.state();
+    keygen::validate_key(&key)?;
+    let src = Path::new(&db_path);
+    import::validate_source(src)?;
+    import::copy_db(src, &state.data_dir)?;
+    keygen::write_private(&paths::key_file(&state.data_dir), &key)
+        .map_err(|e| format!("密钥写入失败: {e}"))?;
+    run_startup_sequence(&app).map_err(|e| {
+        emit_backend_error(&app, &e);
+        e
+    })
 }
