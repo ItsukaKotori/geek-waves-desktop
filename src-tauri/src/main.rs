@@ -250,16 +250,14 @@ fn pick_db_file(app: AppHandle) -> Option<String> {
         .map(|p| p.to_string())
 }
 
-/// 导入:校验 key 与源文件 → 拷库 → 落 key(0600)→ 走启动序列
+/// 导入:校验/准备(prepare_import,key 先于库落盘,中途失败可重试)→ 走启动序列。
+/// 准备阶段错误(key 格式/文件不存在/后缀不对/写 key/拷库)带 VALIDATION: 前缀,
+/// 由前端内联显示在导入屏;启动阶段错误维持原样并 emit backend-error 走错误屏。
 #[tauri::command]
 fn do_import(app: AppHandle, db_path: String, key: String) -> Result<(), String> {
     let state: tauri::State<AppState> = app.state();
-    keygen::validate_key(&key)?;
-    let src = Path::new(&db_path);
-    import::validate_source(src)?;
-    import::copy_db(src, &state.data_dir)?;
-    keygen::write_private(&paths::key_file(&state.data_dir), &key)
-        .map_err(|e| format!("密钥写入失败: {e}"))?;
+    import::prepare_import(&state.data_dir, Path::new(&db_path), &key)
+        .map_err(|e| format!("VALIDATION:{e}"))?;
     run_startup_sequence(&app).map_err(|e| {
         emit_backend_error(&app, &e);
         e

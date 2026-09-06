@@ -101,9 +101,20 @@
   }
   document.getElementById('btn-do-import').addEventListener('click', () => {
     document.getElementById('import-error').textContent = '';
-    show('screen-loading');
+    const btn = document.getElementById('btn-do-import');
+    btn.disabled = true; // in-flight 防双击(loading 屏不再先行遮挡)
     invoke('do_import', { dbPath: picked.path, key: document.getElementById('key-input').value })
-      .catch(e => showError(String(e), ''));
+      .then(() => { show('screen-loading'); })
+      .catch(e => {
+        const msg = String(e);
+        if (msg.indexOf('VALIDATION:') === 0) {
+          show('screen-import');
+          btn.disabled = false;
+          document.getElementById('import-error').textContent = msg.slice('VALIDATION:'.length);
+        } else {
+          showError(msg, '');
+        }
+      });
   });
 
   function start() {

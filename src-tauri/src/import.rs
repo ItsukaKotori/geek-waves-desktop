@@ -23,6 +23,18 @@ pub fn copy_db(src: &Path, data_dir: &Path) -> Result<PathBuf, String> {
     Ok(dst)
 }
 
+/// 导入准备:校验 → 移除旧 key → 写新 key(0600) → 拷库。
+/// key 先写:任何中途失败都停留在「无库有 key」状态,首启屏仍会再现,导入可重试。
+pub fn prepare_import(data_dir: &Path, src: &Path, key: &str) -> Result<(), String> {
+    crate::keygen::validate_key(key)?;
+    validate_source(src)?;
+    let key_path = crate::paths::key_file(data_dir);
+    let _ = std::fs::remove_file(&key_path); // 导入语义:key 随库成对替换
+    crate::keygen::write_private(&key_path, key).map_err(|e| format!("密钥写入失败: {e}"))?;
+    copy_db(src, data_dir)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,6 +76,29 @@ mod tests {
         assert_eq!(dst, d.join("geekwaves.mv.db"));
         assert_eq!(fs::read(&dst).unwrap(), b"payload");
         assert!(!d.join("geekwaves.trace.db").exists());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn prepare_import_replaces_stale_key() {
+        let d = temp_dir("replace-key");
+        let src = d.join("src.mv.db");
+        fs::write(&src, b"payload").unwrap();
+        // 模拟「全新开始」中途失败遗留的旧 key(create_new 语义下会让后续导入卡死的那种)
+        crate::keygen::write_private(&crate::paths::key_file(&d), "stale-key").unwrap();
+        let fresh = format!("{}=", "A".repeat(43)); // 43 个 A + '=' = 32 字节 base64
+        prepare_import(&d, &src, &fresh).unwrap();
+        assert_eq!(fs::read_to_string(crate::paths::key_file(&d)).unwrap(), fresh);
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn prepare_import_copies_source_into_data_dir() {
+        let d = temp_dir("prepare-copy");
+        let src = d.join("my-export.mv.db");
+        fs::write(&src, b"db-bytes").unwrap();
+        prepare_import(&d, &src, &format!("{}=", "A".repeat(43))).unwrap();
+        assert_eq!(fs::read(d.join("geekwaves.mv.db")).unwrap(), b"db-bytes");
         let _ = fs::remove_dir_all(&d);
     }
 }
