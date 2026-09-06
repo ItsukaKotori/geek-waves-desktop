@@ -1,0 +1,4 @@
+{
+  "frontend": { "repo": "cnZuikaku/geek-waves-frontend", "ref": "main" },
+  "backend": { "repo": "cnZuikaku/geek-waves-backend", "ref": "main" }
+}

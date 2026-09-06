@@ -1,0 +1,133 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: macos-arm64
+            os: macos-latest            # arm64 runner
+            rust_target: aarch64-apple-darwin
+            jdk_arch: aarch64
+            tauri_target: --target aarch64-apple-darwin
+            bundles: app,dmg
+          - id: macos-x64
+            os: macos-latest            # arm64 runner + Rosetta(已启用)跑 x64 JDK 与交叉编译
+            rust_target: x86_64-apple-darwin
+            jdk_arch: x64
+            tauri_target: --target x86_64-apple-darwin
+            bundles: app,dmg
+          - id: windows-x64
+            os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            jdk_arch: x64
+            tauri_target: ''
+            bundles: msi
+          - id: linux-x64
+            os: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+            jdk_arch: x64
+            tauri_target: ''
+            bundles: deb,appimage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse deps.json (jq-free)
+        id: deps
+        shell: bash
+        run: |
+          {
+            echo "frontend_repo=$(node -p 'require("./deps.json").frontend.repo')"
+            echo "frontend_ref=$(node -p 'require("./deps.json").frontend.ref')"
+            echo "backend_repo=$(node -p 'require("./deps.json").backend.repo')"
+            echo "backend_ref=$(node -p 'require("./deps.json").backend.ref')"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.deps.outputs.frontend_repo }}
+          ref: ${{ steps.deps.outputs.frontend_ref }}
+          path: geek-waves-frontend
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.deps.outputs.backend_repo }}
+          ref: ${{ steps.deps.outputs.backend_ref }}
+          path: geek-waves-backend
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: geek-waves-frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          architecture: ${{ matrix.jdk_arch }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux webkit deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --locked
+
+      - name: Assemble bundle inputs
+        shell: bash
+        env:
+          FRONTEND_DIR: ${{ github.workspace }}/geek-waves-frontend
+          BACKEND_DIR: ${{ github.workspace }}/geek-waves-backend
+          GRADLE_OFFLINE: 'false'
+          GRADLE_EXTRA: "-I ${{ github.workspace }}/ci/init-repos.gradle -PnexusUsername=ci -PnexusPassword=ci"
+          CI_REPO_DIR: ${{ github.workspace }}/ci-repo
+        run: ./scripts/build.sh --bundle-only
+
+      - name: cargo tauri build
+        shell: bash
+        run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ matrix.tauri_target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.id }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/**/*
+            src-tauri/target/*/release/bundle/**/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*.dmg
+            dist/**/*.msi
+            dist/**/*.deb
+            dist/**/*.AppImage

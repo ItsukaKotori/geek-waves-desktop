@@ -1,0 +1,13 @@
+// GitHub CI 用:nexus.local 不可达,依赖仓库整体替换为 mavenCentral + desktop 仓库内置 ci-repo。
+// settingsEvaluated 在 settings 脚本(含 nexus 声明与 nexusPassword 读取)之后运行,
+// 故 CI 命令行需传哑凭据 -PnexusUsername=ci -PnexusPassword=ci 让 settings 评估先通过。
+settingsEvaluated { settings ->
+    settings.dependencyResolutionManagement.repositories.clear()
+    settings.dependencyResolutionManagement.repositories.mavenCentral()
+    def ciRepoDir = System.getenv("CI_REPO_DIR")
+    if (ciRepoDir != null) {
+        settings.dependencyResolutionManagement.repositories.maven { repo ->
+            repo.url = new File(ciRepoDir).toURI()
+        }
+    }
+}
