@@ -101,7 +101,7 @@ jobs:
           GRADLE_OFFLINE: 'false'
           GRADLE_EXTRA: "-I ${{ github.workspace }}/ci/init-repos.gradle -PnexusUsername=ci -PnexusPassword=ci"
           CI_REPO_DIR: ${{ github.workspace }}/ci-repo
-        run: ./scripts/build.sh --bundle-only
+        run: ./scripts/build.sh --smoke
 
       - name: cargo tauri build
         shell: bash

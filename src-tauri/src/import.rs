@@ -18,7 +18,16 @@ pub fn validate_source(src: &Path) -> Result<(), String> {
 /// 拷贝库文件到数据目录(目标固定名 geekwaves.mv.db),顺带清掉可能存在的旧 trace 文件
 pub fn copy_db(src: &Path, data_dir: &Path) -> Result<PathBuf, String> {
     let dst = data_dir.join("geekwaves.mv.db");
-    std::fs::copy(src, &dst).map_err(|e| format!("数据库拷贝失败: {e}"))?;
+    let tmp = data_dir.join("geekwaves.mv.db.part");
+    // 先写临时名再原子改名:中途失败只留 .part,is_first_run 不受影响,首启可重试
+    std::fs::copy(src, &tmp).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("数据库拷贝失败: {e}")
+    })?;
+    std::fs::rename(&tmp, &dst).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("数据库落盘失败: {e}")
+    })?;
     let _ = std::fs::remove_file(data_dir.join("geekwaves.trace.db"));
     Ok(dst)
 }
@@ -76,6 +85,8 @@ mod tests {
         assert_eq!(dst, d.join("geekwaves.mv.db"));
         assert_eq!(fs::read(&dst).unwrap(), b"payload");
         assert!(!d.join("geekwaves.trace.db").exists());
+        // .part 临时名不得残留:残留的 .part 不会被当作首启库,但必须保证不污染数据目录
+        assert!(!d.join("geekwaves.mv.db.part").exists());
         let _ = fs::remove_dir_all(&d);
     }
 

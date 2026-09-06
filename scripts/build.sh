@@ -2,11 +2,13 @@
 # 组装桌面打包资源(webapp + app.jar + jlink runtime),可选冒烟与 tauri build。
 # 用法:
 #   ./scripts/build.sh               # 组装 + 冒烟 + cargo tauri build(出 dmg)
-#   ./scripts/build.sh --bundle-only # 仅组装(供 CI 或 cargo tauri dev 前置)
+#   ./scripts/build.sh --bundle-only # 组装 + 冒烟后退出(cargo tauri dev 前置;语义变化:也跑冒烟,多花 ~20s)
+#   ./scripts/build.sh --smoke       # 组装 + 冒烟,不打包(供 CI)
 # 环境变量:FRONTEND_DIR / BACKEND_DIR 覆盖兄弟仓库路径;JAVA_HOME 覆盖 jlink 用 JDK(须 21);
 #           GRADLE_OFFLINE=1(默认)离线构建后端;GRADLE_EXTRA 追加 gradlew 参数(预留给 CI 传 init 脚本;
 #           仅限空格分隔的 flag 类参数,经词分割展开,含空格的路径会碎)
 set -euo pipefail
+MODE="${1:-}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRONTEND_DIR="${FRONTEND_DIR:-$ROOT/../geek-waves-frontend}"
@@ -47,6 +49,8 @@ if [[ -z "${JAVA_HOME:-}" ]]; then
   JAVA_BIN_PATH="$(command -v java)"
   JAVA_HOME="$(cd "$(dirname "$JAVA_BIN_PATH")/.." && pwd)"
 fi
+# 终审诊断:显式打出实际参与 jlink 的 JDK 版本/架构(交叉打包腿最易在此踩坑)
+log "JDK: $( "$JAVA_HOME/bin/java" -version 2>&1 | head -1 )"
 log "jlink 裁剪 JRE($JAVA_HOME)"
 rm -rf "$RESOURCES/runtime"
 "$JAVA_HOME/bin/jlink" \
@@ -57,12 +61,12 @@ rm -rf "$RESOURCES/runtime"
 # 资源变更后的二次构建会因覆盖只读目标文件而 EACCES(Task 3 本机实修)。统一补回属主写权限。
 chmod -R u+w "$RESOURCES/runtime"
 
-if [[ "${1:-}" == "--bundle-only" ]]; then
-  log "仅组装完成:$RESOURCES"
-  exit 0
-fi
-
 # --- 4. 冒烟:jlink runtime 启动 app.jar,验证 /api/ping 与 SPA 回退 ---
+# 端口被占则换备用端口,避免本机场景误报(CI 四腿各自独立 runner 无冲突)
+if curl -s -o /dev/null --connect-timeout 2 "http://127.0.0.1:$SMOKE_PORT"; then
+  log "端口 $SMOKE_PORT 已被占用,冒烟改用 18983"
+  SMOKE_PORT=18983
+fi
 log "冒烟测试(端口 $SMOKE_PORT)"
 SMOKE_DIR="$(mktemp -d)"
 "$RESOURCES/runtime/bin/java" -jar "$RESOURCES/app.jar" \
@@ -87,6 +91,12 @@ done
 curl -sf "http://127.0.0.1:$SMOKE_PORT/tools" | grep -q "GeekWaves" \
   || { echo "冒烟失败:/tools 未回退到 index.html(SPA fallback 未生效)"; exit 1; }
 log "冒烟通过(/api/ping + SPA 回退)"
+
+# --bundle-only / --smoke:都在冒烟之后退出(--smoke=CI 冒烟门槛;--bundle-only 顺带跑冒烟是有意的)
+if [[ "$MODE" == "--bundle-only" || "$MODE" == "--smoke" ]]; then
+  log "完成(mode=$MODE)"
+  exit 0
+fi
 
 # --- 5. tauri build(出 dmg)---
 log "cargo tauri build"

@@ -84,6 +84,7 @@
   listen('backend-error', ({ payload }) => showError(payload.message, payload.log));
 
   const picked = { path: null };
+  let inFlight = false; // 导入进行中:输入 key 等事件会触发 refreshImportState,不能旁路禁用态
   document.getElementById('btn-import').addEventListener('click', () => show('screen-import'));
   document.getElementById('btn-back').addEventListener('click', () => show('screen-first'));
   document.getElementById('btn-pick').addEventListener('click', async () => {
@@ -97,21 +98,24 @@
   document.getElementById('key-input').addEventListener('input', refreshImportState);
   function refreshImportState() {
     const key = document.getElementById('key-input').value.trim();
-    document.getElementById('btn-do-import').disabled = !(picked.path && key);
+    document.getElementById('btn-do-import').disabled = inFlight || !(picked.path && key);
   }
   document.getElementById('btn-do-import').addEventListener('click', () => {
     document.getElementById('import-error').textContent = '';
-    const btn = document.getElementById('btn-do-import');
-    btn.disabled = true; // in-flight 防双击(loading 屏不再先行遮挡)
+    inFlight = true; // in-flight 防双击/旁路(loading 屏不再先行遮挡;成功导航前不复位,页面会被接管)
+    refreshImportState();
     invoke('do_import', { dbPath: picked.path, key: document.getElementById('key-input').value })
       .then(() => { show('screen-loading'); })
       .catch(e => {
         const msg = String(e);
         if (msg.indexOf('VALIDATION:') === 0) {
           show('screen-import');
-          btn.disabled = false;
+          inFlight = false;
+          refreshImportState();
           document.getElementById('import-error').textContent = msg.slice('VALIDATION:'.length);
         } else {
+          inFlight = false;
+          refreshImportState();
           showError(msg, '');
         }
       });
