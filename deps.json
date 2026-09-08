@@ -1,4 +1,4 @@
 {
-  "frontend": { "repo": "ItsukaKotori/geek-waves-frontend", "ref": "master" },
-  "backend": { "repo": "ItsukaKotori/geek-waves-backend", "ref": "master" }
+  "frontend": { "repo": "ItsukaKotori/geek-waves-frontend", "ref": "61e252924335ae4e640cd5ad3a39a7fdba1910b4" },
+  "backend": { "repo": "ItsukaKotori/geek-waves-backend", "ref": "69947d5b7489963d74eb02961a1df028e66d9a0e" }
 }
