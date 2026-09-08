@@ -69,13 +69,15 @@ if curl -s -o /dev/null --connect-timeout 2 "http://127.0.0.1:$SMOKE_PORT"; then
 fi
 log "冒烟测试(端口 $SMOKE_PORT)"
 SMOKE_DIR="$(mktemp -d)"
-# Windows(git-bash)路径含反斜杠,file:/jdbc: URL 需正斜杠——统一归一(windows 冒烟实修:SPA 回退 404)
+# Windows(git-bash)路径含反斜杠,file: URL 需正斜杠且盘符路径要 file:/D:/ 前置斜杠
+# (file:D:/x 会被 Java URI 视为 opaque 不可解析——windows 冒烟实修:SPA 回退 404)
 SMOKE_DIR_URL="${SMOKE_DIR//\\//}"
 WEBAPP_URL="${RESOURCES//\\//}"
+if [[ "$WEBAPP_URL" == /* ]]; then WEBAPP_LOC="file:$WEBAPP_URL/webapp/"; else WEBAPP_LOC="file:/$WEBAPP_URL/webapp/"; fi
 "$RESOURCES/runtime/bin/java" -jar "$RESOURCES/app.jar" \
   --server.port=$SMOKE_PORT --server.address=127.0.0.1 \
   --spring.datasource.url="jdbc:h2:file:$SMOKE_DIR_URL/smoke;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE" \
-  --spring.web.resources.static-locations="file:$WEBAPP_URL/webapp/" \
+  --spring.web.resources.static-locations="$WEBAPP_LOC" \
   --geekwaves.web.spa-fallback=true \
   > "$SMOKE_DIR/smoke.log" 2>&1 &
 SMOKE_PID=$!

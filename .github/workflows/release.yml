@@ -109,6 +109,9 @@ jobs:
 
       - name: cargo tauri build
         shell: bash
+        env:
+          # AppImage 工具链(linuxdeploy)在 CI 沙箱无 /dev/fuse,解包运行绕开 FUSE
+          APPIMAGE_EXTRACT_AND_RUN: '1'
         run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ matrix.tauri_target }}
 
       - uses: actions/upload-artifact@v4
