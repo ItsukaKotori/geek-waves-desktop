@@ -33,22 +33,16 @@ pub fn spawn_backend(
         }
     }
     let log = OpenOptions::new().create(true).append(true).open(log_path)?;
-    // file: URL:Windows 路径需正斜杠 + 盘符前补斜杠(file:/D:/x;file:D:/x 是 opaque URI 不可解析)
-    let to_url_path = |p: &Path| p.display().to_string().replace('\\', "/");
-    let datasource = format!("jdbc:h2:file:{}{}", to_url_path(&data_dir.join("geekwaves")), H2_PARAMS);
-    let webapp_url = to_url_path(webapp_dir);
-    let webapp_loc = if webapp_url.starts_with('/') {
-        format!("file:{webapp_url}/")
-    } else {
-        format!("file:/{webapp_url}/")
-    };
+    // webapp 用纯路径属性(geekwaves.web.webapp-dir):Windows 下任何 file: URL 形式都无法
+    // 同时满足 URI 解析与 File 语义(实测),后端以 FileSystemResource 直读,天然跨平台
+    let datasource = format!("jdbc:h2:file:{}{}", data_dir.join("geekwaves").display(), H2_PARAMS);
     Command::new(java_bin)
         .arg("-jar")
         .arg(jar)
         .arg(format!("--server.port={port}"))
         .arg("--server.address=127.0.0.1")
         .arg(format!("--spring.datasource.url={datasource}"))
-        .arg(format!("--spring.web.resources.static-locations={webapp_loc}"))
+        .arg(format!("--geekwaves.web.webapp-dir={}", webapp_dir.display()))
         .arg("--geekwaves.web.spa-fallback=true")
         .env("GEEKWAVES_CRYPTO_KEY", key)
         .current_dir(data_dir)

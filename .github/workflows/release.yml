@@ -37,7 +37,7 @@ jobs:
             rust_target: x86_64-unknown-linux-gnu
             jdk_arch: x64
             tauri_target: ''
-            bundles: deb,appimage
+            bundles: deb   # AppImage 暂缓:linuxdeploy 在 CI 沙箱无诊断输出即失败,待本地容器复现后排障跟进
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
