@@ -5,7 +5,8 @@
 #   ./scripts/build.sh --bundle-only # 组装 + 冒烟后退出(cargo tauri dev 前置;语义变化:也跑冒烟,多花 ~20s)
 #   ./scripts/build.sh --smoke       # 组装 + 冒烟,不打包(供 CI)
 # 环境变量:FRONTEND_DIR / BACKEND_DIR 覆盖兄弟仓库路径;JAVA_HOME 覆盖 jlink 用 JDK(须 21);
-#           GRADLE_OFFLINE=1(默认)离线构建后端;GRADLE_EXTRA 追加 gradlew 参数(预留给 CI 传 init 脚本;
+#           GRADLE_OFFLINE=0(默认)在线构建后端(从 GitHub Packages 拉 itsuka 构件,需 gpr.token;
+#           见 ~/.gradle/gradle.properties),1 为离线;GRADLE_EXTRA 追加 gradlew 参数(预留给 CI 传 init 脚本;
 #           仅限空格分隔的 flag 类参数,经词分割展开,含空格的路径会碎)
 set -euo pipefail
 MODE="${1:-}"
@@ -24,7 +25,7 @@ RESOURCES="$ROOT/src-tauri/resources"
 # (Netty/Tomcat/热插拔代理/扩展 socket 选项)。
 MODULES="java.base,java.compiler,java.datatransfer,java.desktop,java.instrument,java.logging,java.management,java.management.rmi,java.naming,java.net.http,java.prefs,java.scripting,java.security.jgss,java.sql,java.sql.rowset,java.transaction.xa,java.xml,java.xml.crypto,jdk.attach,jdk.crypto.cryptoki,jdk.crypto.ec,jdk.jdi,jdk.jfr,jdk.localedata,jdk.management,jdk.net,jdk.unsupported,jdk.zipfs"
 SMOKE_PORT=18982
-GRADLE_OFFLINE="${GRADLE_OFFLINE:-1}"
+GRADLE_OFFLINE="${GRADLE_OFFLINE:-0}"
 
 log() { echo "[build-desktop] $*"; }
 

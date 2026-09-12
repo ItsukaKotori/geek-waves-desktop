@@ -10,12 +10,15 @@ GeekWaves 桌面端:Tauri 2 壳内嵌 jlink JRE + Spring Boot 后端,双击即�
 - `splash/` 壳内置首启/加载/错误页(非 Vue)
 - `scripts/build.sh` 一键打包(组装 → jlink → 冒烟 → dmg);`--bundle-only` 供 CI / dev 前置
 - `deps.json` 钉 frontend/backend 仓库与 ref(CI 按此 checkout)
-- `ci-repo/` 内置 maven 仓库,离线解析 `org.itsuka:*:1.0.0-SNAPSHOT` 私有构件(nexus.local 不可达);`scripts/vendor-libs.sh` 从本机 gradle 缓存导出,更新 starter 后需重跑并提交
+- `ci/init-repos.gradle` CI 依赖仓库初始化:把仓库替换为 mavenCentral + GitHub Packages,从
+  `https://maven.pkg.github.com/ItsukaKotori/itsuka-spring` 解析 `org.itsuka:*:1.0.0-SNAPSHOT`;
+  需要仓库 secret `PACKAGES_READ_TOKEN`(read:packages PAT)
 
 ## 本机构建(macOS)
 
 前置:Rust stable、Node 22、JDK 21、`cargo install tauri-cli --locked`,
-兄弟仓库 `geek-waves-frontend`/`geek-waves-backend` 与本仓库同级。
+兄弟仓库 `geek-waves-frontend`/`geek-waves-backend` 与本仓库同级,
+`~/.gradle/gradle.properties` 配 `gpr.user`/`gpr.token`(GitHub Packages read:packages PAT)。
 
 ```bash
 ./scripts/build.sh          # 出 src-tauri/target/release/bundle/dmg/*.dmg

@@ -103,8 +103,9 @@ jobs:
           FRONTEND_DIR: ${{ github.workspace }}/geek-waves-frontend
           BACKEND_DIR: ${{ github.workspace }}/geek-waves-backend
           GRADLE_OFFLINE: 'false'
-          GRADLE_EXTRA: "-I ${{ github.workspace }}/ci/init-repos.gradle -PnexusUsername=ci -PnexusPassword=ci"
-          CI_REPO_DIR: ${{ github.workspace }}/ci-repo
+          GRADLE_EXTRA: "-I ${{ github.workspace }}/ci/init-repos.gradle"
+          GH_PACKAGES_USER: ItsukaKotori
+          GH_PACKAGES_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
         run: ./scripts/build.sh --smoke
 
       - name: cargo tauri build
