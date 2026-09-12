@@ -41,12 +41,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## 发版(CI)
 
-仓库双远端:Gitee canonical,GitHub 跑 CI。Gitee 建仓后补配远端:
-`git remote add origin git@gitee.com:cnZuikaku/geek-waves-desktop.git && git push origin main`。
+仓库远端:GitHub(`origin`)。前置:gh auth login(发布阶段需要)。发版流程:
 
-前置:gh auth login(发布阶段需要)。发版流程:
-
-1. 前后端推 Gitee + GitHub(`git push origin && git push github --tags`)
+1. 前后端推 GitHub(`git push origin --tags`)
 2. 更新 `deps.json` 的 ref 到目标提交/tag → 提交推送
-3. 打 tag:`git tag v0.x.y && git push github v0.x.y`
+3. 打 tag:`git tag v0.x.y && git push origin v0.x.y`
 4. Actions 四平台矩阵出包并挂到 GitHub Release(windows msi / linux deb+AppImage / mac 双架构 dmg)
